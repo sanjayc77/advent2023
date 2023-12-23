@@ -4,8 +4,15 @@ app "AoC"
     }
     imports [
         pf.Stdout,
+        "input.txt" as input : Str,
     ]
     provides [main] to pf
+
+# Convert input to a 2D array of individual character strings.
+data =
+    Str.split input "\n"
+    |> Str.joinWith ""
+    |> Str.graphemes
 
 testData =
     [
@@ -23,25 +30,17 @@ testData =
         "1.1..503+.56",
     ]
     |> Str.joinWith ""
-# |> Str.graphemes
+    |> Str.graphemes
+
+expect scanForNumbers testData 12 == 925
 
 main =
-    dbg "Starting"
+    total = scanForNumbers data 140
+    Stdout.line (Num.toStr total)
 
-    # numbers = walkData data 140 140
-    #     # |> Set.toList
-    #     |> List.sortAsc
-    #     # |> List.sum
-    # dbg numbers
-    dbg testData
-
-    # dbg List.len testData
-    # s = walkData testData 12 12
-    # r = List.walk testData [] \state, char -> state
-    # dbg r
+scanForNumbers = \buffer, yDim ->
     # Scan string data for numeric characters and store indexes for when then occur.
-    r = Str.walkUtf8WithIndex testData { indexes: [], found: Bool.false } \state, byte, index ->
-        char = Result.withDefault (Str.fromUtf8 [byte]) "."
+    r = List.walkWithIndex data { indexes: [], found: Bool.false } \state, char, index ->
         # If char is numeric, check if it is the first of a word of numeric digits.
         if Result.isOk (Str.toU8 char) then
             if !state.found then
@@ -53,26 +52,18 @@ main =
         else
             # Non-numeric char, reset found to false.
             { indexes: state.indexes, found: Bool.false }
-    m = Str.graphemes testData
-    allNumbers = List.map r.indexes \i -> getNumberAt i m
-    dbg allNumbers
+    allNumbers = List.map r.indexes \i -> getNumberAt i buffer
 
     expect
         List.len r.indexes == List.len allNumbers
 
     zipped = List.map2 r.indexes allNumbers \a, b -> { index: a, number: b }
-    dbg zipped
 
-    numbers = List.keepIf zipped (\e -> hasSymbolAround m 12 e.index e.number)
+    List.keepIf zipped (\e -> hasSymbolAround buffer yDim e.index e.number)
         |> List.map \rec -> Result.withDefault (Str.toNat rec.number) 0
         |> List.sum
-    dbg numbers
-    # sum = List.sum numbers
-    # dbg sum
-    Stdout.line "done"
 
-hasSymbolAround = \data, yDim, index, number ->
-    len = Str.countGraphemes number
+hasSymbolAround = \buffer, yDim, index, number ->
     state = {set: (Set.empty {}), index}
     indexesToCheck = Str.walkUtf8 number state \s, _ ->
         pos = positionFromIndex s.index yDim
@@ -81,10 +72,10 @@ hasSymbolAround = \data, yDim, index, number ->
         {set: newState.set, index: newState.index + 1}
     Set.map indexesToCheck.set \e -> indexFromPosition e.x e.y yDim yDim
     |> Set.toList
-    |> List.any \i -> isSymbol (Result.withDefault (List.get data i) ".")
+    |> List.any \i -> isSymbol (Result.withDefault (List.get buffer i) ".")
 
-getNumberAt = \index, data ->
-    walkWithIndexForwardUntil data index [] \state, char, _ ->
+getNumberAt = \index, buffer ->
+    walkWithIndexForwardUntil buffer index [] \state, char, _ ->
         when Str.toU8 char is
             Ok _ -> Continue (List.append state char)
             _ -> Break state
